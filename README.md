@@ -1,7 +1,213 @@
 # FailSafe
 
-**The incident-response agent you can trust with root.**
+> **The incident-response agent you can trust with root.**
 
-FailSafe is an AUTMA LLC project for the 2026 Agent Harness Hackathon. It uses TrueForge to investigate a live incident through MCP tools, delegate evidence gathering to subagents, run diagnostics in an isolated sandbox, pause before remediation, survive reconnects, and verify recovery.
+FailSafe is a TrueForge-powered incident commander that earns permission to act. It gathers evidence through a real MCP server, delegates focused investigations to dynamic subagents, executes generated analysis code in a sandbox, pauses before destructive remediation, and verifies recovery from post-action signals.
 
-Development is in progress.
+The included checkout outage is deterministic and explicitly synthetic. It is designed to make every part of the agent harness visible, repeatable, and safe to judge.
+
+![FailSafe investigating state](docs/assets/failsafe-investigating.png)
+
+<details>
+<summary>Verified recovery state</summary>
+
+![FailSafe resolved state](docs/assets/failsafe-resolved.png)
+
+</details>
+
+## What the demo proves
+
+One incident produces five visible proof moments:
+
+1. **Real MCP evidence** from health, metrics, logs, deployments, and diffs.
+2. **Three focused subagents** investigating telemetry, deployment causality, and remediation safety.
+3. **Generated sandbox code** correlating the deployment and failure windows.
+4. **A real human approval object** that blocks rollback before execution.
+5. **Measured recovery verification** using signals timestamped after remediation.
+
+## The incident
+
+At 14:02 UTC, `checkout-api@2026.08.26-rc3` reaches production. It increases each replica's database pool from 20 to 80 connections while reducing acquisition timeout from 2 seconds to 250 milliseconds. Six replicas can now demand 480 connections from a database capped at 200.
+
+Within two minutes:
+
+- checkout 5xx rate reaches **27.4%**
+- checkout p95 reaches **2,420ms**
+- PostgreSQL reaches **198 / 200** active connections
+- checkout conversion drops **31%**
+
+A restart leaves the bad configuration active. Only a validated rollback to `checkout-api@2026.08.26-rc2` restores service.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    O[Operator] --> TF[TrueForge session]
+    TF --> C[FailSafe Commander]
+    C --> T[Telemetry subagent]
+    C --> D[Deployment subagent]
+    C --> S[Safety subagent]
+    C --> SB[TrueForge sandbox]
+    T --> MCP[FailSafe MCP server]
+    D --> MCP
+    S --> MCP
+    MCP --> LAB[Synthetic incident lab]
+    LAB --> UI[Live incident console]
+    C --> G{Human approval}
+    G -->|Allow exact call| R[Validated rollback]
+    G -->|Deny| X[No mutation]
+    R --> LAB
+    LAB --> V[Post-rollback verification]
+```
+
+## Quick start
+
+### Prerequisites
+
+- Node.js 20 or newer
+- pnpm 11
+- a supported model provider configured in TrueForge
+
+### 1. Install and verify
+
+```bash
+pnpm install
+pnpm check
+```
+
+### 2. Start FailSafe
+
+```bash
+pnpm start
+```
+
+Open the incident console at <http://localhost:3100>.
+
+### 3. Start TrueForge
+
+In another terminal:
+
+```bash
+npx @truefoundry/trueforge --port 8790
+```
+
+Configure a model provider in TrueForge Settings. The checked-in manifest defaults to `openrouter/gemini-2.5-flash`, but any configured supported model can be selected without editing files:
+
+```bash
+FAILSAFE_MODEL=provider/model pnpm trueforge:configure
+```
+
+The configuration script:
+
+- verifies the selected model exists
+- creates or replaces the `failsafe-incident-lab` MCP connector
+- requires approval for `@write` and `@destructive` tools
+- verifies all 10 tools are discoverable
+- creates or updates the `failsafe-commander` saved agent
+- enables the local sandbox and dynamic subagents
+
+Open TrueForge at <http://localhost:8790> and select **failsafe-commander**.
+
+### 4. Run the incident
+
+```text
+Investigate synthetic incident INC-2048. Use exactly three parallel subagents for telemetry, deployment causality, and remediation safety. Use the sandbox for one correlation calculation. Gather evidence, choose the smallest safe action, then initiate the exact remediation tool call so TrueForge creates a real approval gate. Do not claim recovery until measured verification passes.
+```
+
+Use [`docs/demo-runbook.md`](docs/demo-runbook.md) for the exact three-minute sequence.
+
+### 5. Reset
+
+```bash
+pnpm demo:reset
+```
+
+The fixture returns to `investigating` on rc3, ready for another run.
+
+## MCP tool surface
+
+| Tool | Purpose | Policy annotation |
+|---|---|---|
+| `incident_brief` | Read incident scope and impact | read-only |
+| `service_health` | Inspect current service health | read-only |
+| `metrics_query` | Query deterministic metric series | read-only |
+| `logs_search` | Search correlated service logs | read-only |
+| `recent_deployments` | List recent deployment activity | read-only |
+| `deployment_diff` | Inspect the suspected configuration change | read-only |
+| `timeline_record` | Add an audit note | write, approval required |
+| `restart_service` | Demonstrate an insufficient remediation | destructive, approval required |
+| `rollback_deployment` | Restore the last known-good revision | destructive, approval required |
+| `verify_recovery` | Evaluate post-action SLO gates | read-only |
+
+## Safety guarantees
+
+- The environment is labeled **synthetic** in the UI, agent instructions, and runbook.
+- The HTTP and MCP server binds only to `127.0.0.1`; it is not exposed to the LAN.
+- Read tools cannot mutate state.
+- Every write or destructive tool used through FailSafe Commander is blocked by TrueForge approval policy. Direct MCP access remains a local test interface only.
+- Rollback rejects the wrong service, deployment ID, or target revision.
+- Repeating an approved rollback is idempotent.
+- A restart cannot falsely heal the fixture.
+- Recovery cannot pass until rollback is applied.
+- Recovery samples occur from `14:11:10Z` through `14:11:50Z`, after rollback at `14:11:00Z` and before verification at `14:12:00Z`.
+- No model or provider credentials are stored in this repository.
+
+## HTTP endpoints
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/` | GET | Responsive incident console |
+| `/api/health` | GET | Process readiness |
+| `/api/state` | GET | Current deterministic incident state |
+| `/api/reset` | POST | Reset the synthetic fixture |
+| `/mcp` | POST | Stateless Streamable HTTP MCP endpoint |
+
+## Development
+
+```bash
+pnpm dev                 # watch TypeScript server
+pnpm lint                # ESLint
+pnpm typecheck           # strict TypeScript
+pnpm test:run            # deterministic unit + integration tests
+pnpm test:run --coverage # V8 coverage
+pnpm build               # clean production compile
+pnpm check               # complete local gate
+```
+
+The verified gate currently covers:
+
+- state transitions and unsafe rollback refusal
+- restart-without-recovery behavior
+- post-rollback evidence timing
+- MCP tool discovery, annotations, calls, and error responses
+- dashboard and static asset delivery
+- health, state, 404, and method policy routes
+- clean compiled startup and remote Streamable HTTP discovery
+
+## Repository layout
+
+```text
+public/                  incident console
+src/incident/            deterministic incident state machine
+src/mcp/                 MCP tool definitions and server
+scripts/                 reset and TrueForge configuration
+trueforge/               secret-free saved-agent manifest
+tests/                   unit and integration verification
+docs/                    demo runbook and implementation plan
+```
+
+## Qodo Code Review Evidence
+
+Qodo Code Review is required for the hackathon. Every substantive change is delivered through a pull request. This section will link the reviewed pull request and summarize valid findings, applied fixes, and any publicly reasoned dismissals before final submission.
+
+- Reviewed pull request: pending
+- Valid High findings: pending review
+- Follow-up review after fixes: pending
+
+## AI tool-use disclosure
+
+AI coding agents were used to help research TrueForge, plan the project, write implementation code, and review changes. All generated work was inspected, executed, tested, and corrected against real runtime output. The implementation does not claim fabricated tool results, production connectivity, or recovery evidence.
+
+## License
+
+MIT © 2026 AUTMA LLC
