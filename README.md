@@ -6,10 +6,23 @@ FailSafe is a TrueForge-powered incident commander that earns permission to act.
 
 The included checkout outage is deterministic and explicitly synthetic. It is designed to make every part of the agent harness visible, repeatable, and safe to judge.
 
+## Judge this in 60 seconds
+
+1. Watch the [three-minute demo](https://youtu.be/WHKEKvfC-dI).
+2. Open the [judges' guide](docs/judges-guide.md) for a criterion-by-criterion evidence map.
+3. Inspect the [threat model](docs/threat-model.md) and checked-in [TrueForge agent manifest](trueforge/failsafe-agent.json).
+4. Run `pnpm install && pnpm check` to execute the complete 17-test gate.
+5. Read the public [field report](docs/field-report.md) for the architecture, failures, fixes, and design reasoning.
+
+FailSafe is strongest when judged as one complete control loop: **observe, delegate, calculate, ask, act, verify**.
+
 ## Demo
 
 - Three-minute video: [FailSafe: The Incident Agent You Can Trust With Root](https://youtu.be/WHKEKvfC-dI)
 - Reproducible runbook: [`docs/demo-runbook.md`](docs/demo-runbook.md)
+- Judging evidence map: [`docs/judges-guide.md`](docs/judges-guide.md)
+- Public field report: [`docs/field-report.md`](docs/field-report.md)
+- Safety analysis: [`docs/threat-model.md`](docs/threat-model.md)
 
 The video uses the same deterministic synthetic incident and checked-in TrueForge agent manifest. It does not claim access to a production system.
 
@@ -31,6 +44,19 @@ One incident produces five visible proof moments:
 3. **Generated sandbox code** correlating the deployment and failure windows.
 4. **A real human approval object** that blocks rollback before execution.
 5. **Measured recovery verification** using signals timestamped after remediation.
+
+## Why this cannot be a chatbot
+
+TrueForge is not hidden under a chat wrapper. It owns the behaviors that make the project qualify:
+
+- MCP discovery and classified tool execution
+- exactly three bounded dynamic subagents
+- generated Python running in the local sandbox
+- a real approval object that intercepts the rollback tool call
+- session and pending-approval continuity across reconnects
+- the recovery turn and event history after mutation
+
+Removing TrueForge removes the safety and orchestration properties the project is demonstrating.
 
 ## The incident
 
@@ -181,6 +207,8 @@ pnpm build               # clean production compile
 pnpm check               # complete local gate
 ```
 
+GitHub Actions runs the same `pnpm check` gate on every pull request and push to the contest branches.
+
 The verified gate currently covers:
 
 **17 passing tests** across unit, HTTP, MCP, server-binding, and monotonic-timeline behavior.
@@ -196,6 +224,7 @@ The verified gate currently covers:
 ## Repository layout
 
 ```text
+.github/workflows/       visible CI gate
 public/                  incident console
 src/incident/            deterministic incident state machine
 src/mcp/                 MCP tool definitions and server
