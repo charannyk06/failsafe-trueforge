@@ -24,14 +24,10 @@ const metricTimes = [
   '2026-08-26T14:10:00.000Z',
 ];
 
-const recoveryMetricTimes = [
-  '2026-08-26T14:11:10.000Z',
-  '2026-08-26T14:11:18.000Z',
-  '2026-08-26T14:11:26.000Z',
-  '2026-08-26T14:11:34.000Z',
-  '2026-08-26T14:11:42.000Z',
-  '2026-08-26T14:11:50.000Z',
-];
+const recoveryMetricOffsetsSeconds = [10, 18, 26, 34, 42, 50];
+
+const timeAfter = (timestamp: string, seconds: number) =>
+  new Date(new Date(timestamp).getTime() + seconds * 1_000).toISOString();
 
 const points = (values: number[], timestamps = metricTimes) =>
   values.map((value, index) => ({ timestamp: timestamps[index]!, value }));
@@ -166,7 +162,8 @@ function degradedMetrics(): MetricSeries[] {
   ];
 }
 
-function recoveredMetrics(): MetricSeries[] {
+function recoveredMetrics(rollbackAt: string): MetricSeries[] {
+  const recoveryMetricTimes = recoveryMetricOffsetsSeconds.map(seconds => timeAfter(rollbackAt, seconds));
   return [
     {
       ...degradedMetrics()[0]!,
@@ -246,12 +243,16 @@ export class IncidentStore {
   private restartAttempts = 0;
   private customTimeline: TimelineEvent[] = [];
   private actionLogs: LogEntry[] = [];
+  private timelineCursorMs = new Date(initialTimeline.at(-1)!.timestamp).getTime();
+  private rollbackAt: string | null = null;
 
   reset(): IncidentSnapshot {
     this.rolledBack = false;
     this.restartAttempts = 0;
     this.customTimeline = [];
     this.actionLogs = [];
+    this.timelineCursorMs = new Date(initialTimeline.at(-1)!.timestamp).getTime();
+    this.rollbackAt = null;
     return this.snapshot();
   }
 
@@ -265,7 +266,7 @@ export class IncidentStore {
   }
 
   queryMetrics(metric?: MetricName, service?: ServiceName): MetricSeries[] {
-    return (this.rolledBack ? recoveredMetrics() : degradedMetrics()).filter(
+    return (this.rolledBack ? recoveredMetrics(this.rollbackAt!) : degradedMetrics()).filter(
       series => (!metric || series.metric === metric) && (!service || series.service === service),
     );
   }
@@ -301,7 +302,7 @@ export class IncidentStore {
     const sequence = this.customTimeline.length + 5;
     const event: TimelineEvent = {
       id: `evt-${String(sequence).padStart(3, '0')}`,
-      timestamp: `2026-08-26T14:${String(6 + this.customTimeline.length).padStart(2, '0')}:30.000Z`,
+      timestamp: this.nextTimelineTimestamp(),
       kind: 'note',
       actor,
       summary,
@@ -317,7 +318,7 @@ export class IncidentStore {
     const stillDegraded = !this.rolledBack && service === 'checkout-api';
     this.customTimeline.push({
       id: `evt-${String(this.customTimeline.length + 5).padStart(3, '0')}`,
-      timestamp: `2026-08-26T14:${String(6 + this.customTimeline.length).padStart(2, '0')}:30.000Z`,
+      timestamp: this.nextTimelineTimestamp(),
       kind: 'action',
       actor: 'failsafe-agent',
       summary: `Restarted ${service}: ${reason}`,
@@ -361,9 +362,10 @@ export class IncidentStore {
     }
 
     this.rolledBack = true;
+    this.rollbackAt = this.nextTimelineTimestamp('2026-08-26T14:11:00.000Z');
     this.customTimeline.push({
       id: `evt-${String(this.customTimeline.length + 5).padStart(3, '0')}`,
-      timestamp: '2026-08-26T14:11:00.000Z',
+      timestamp: this.rollbackAt,
       kind: 'recovery',
       actor: 'failsafe-agent',
       summary: `Rolled checkout-api back to ${STABLE_REVISION}`,
@@ -371,19 +373,19 @@ export class IncidentStore {
     });
     this.actionLogs.push(
       {
-        timestamp: '2026-08-26T14:11:08.000Z',
+        timestamp: timeAfter(this.rollbackAt, 8),
         level: 'INFO',
         service: 'checkout-api',
         message: `rollback complete from=${BAD_REVISION} to=${STABLE_REVISION} ready=6/6`,
       },
       {
-        timestamp: '2026-08-26T14:11:21.000Z',
+        timestamp: timeAfter(this.rollbackAt, 21),
         level: 'INFO',
         service: 'postgres-primary',
         message: 'connection pressure cleared active=84 max=200',
       },
       {
-        timestamp: '2026-08-26T14:11:36.000Z',
+        timestamp: timeAfter(this.rollbackAt, 36),
         level: 'INFO',
         service: 'edge-gateway',
         message: 'checkout upstream healthy 5xx_rate=0.4% p95_ms=196',
@@ -436,7 +438,7 @@ export class IncidentStore {
       verdict: verified
         ? 'Recovery verified: checkout and database signals are within SLO on the last known-good revision.'
         : 'Recovery not verified: rollback is required and one or more signals remain outside SLO.',
-      checkedAt: this.rolledBack ? '2026-08-26T14:12:00.000Z' : '2026-08-26T14:10:00.000Z',
+      checkedAt: this.rolledBack ? timeAfter(this.rollbackAt!, 60) : '2026-08-26T14:10:00.000Z',
       checks,
     };
   }
@@ -464,7 +466,7 @@ export class IncidentStore {
         severity: 'SEV-1',
         status: this.rolledBack ? 'resolved' : 'investigating',
         startedAt: '2026-08-26T14:04:02.000Z',
-        resolvedAt: this.rolledBack ? '2026-08-26T14:12:00.000Z' : null,
+        resolvedAt: this.rolledBack ? timeAfter(this.rollbackAt!, 60) : null,
         customerImpact: this.rolledBack ? 'Recovered; checkout success is 99.6%.' : '31% drop in checkout conversion; 27.4% of checkout requests failing.',
         hypothesis: 'checkout-api rc3 multiplied connection demand beyond the Postgres 200-connection ceiling.',
         requiredRecoveryAction: `Roll back ${BAD_DEPLOYMENT_ID} to ${STABLE_REVISION}. A restart preserves the bad configuration and cannot recover the incident.`,
@@ -486,5 +488,11 @@ export class IncidentStore {
 
   private revisionFor(service: ServiceName): string {
     return this.getServiceHealth(service)[0]!.revision;
+  }
+
+  private nextTimelineTimestamp(minimum?: string): string {
+    const minimumMs = minimum ? new Date(minimum).getTime() : Number.NEGATIVE_INFINITY;
+    this.timelineCursorMs = Math.max(this.timelineCursorMs + 30_000, minimumMs);
+    return new Date(this.timelineCursorMs).toISOString();
   }
 }

@@ -195,10 +195,10 @@ async function syncState() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     render(await response.json());
     connection.className = 'connection online';
-    connection.innerHTML = '<span class="pulse" aria-hidden="true"></span>MCP ONLINE';
+    connection.innerHTML = '<span class="pulse" aria-hidden="true"></span>LAB API ONLINE';
   } catch (error) {
     connection.className = 'connection offline';
-    connection.innerHTML = '<span class="pulse" aria-hidden="true"></span>MCP OFFLINE';
+    connection.innerHTML = '<span class="pulse" aria-hidden="true"></span>LAB API OFFLINE';
     console.error('FailSafe state sync failed', error);
   }
 }

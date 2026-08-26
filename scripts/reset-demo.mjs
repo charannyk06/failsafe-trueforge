@@ -1,6 +1,6 @@
 /* global console, fetch, process */
 
-const baseUrl = process.env.FAILSAFE_URL ?? 'http://127.0.0.1:3100';
+const baseUrl = (process.env.FAILSAFE_URL ?? 'http://127.0.0.1:3100').replace(/\/+$/, '');
 const response = await fetch(`${baseUrl}/api/reset`, { method: 'POST' });
 
 if (!response.ok) {

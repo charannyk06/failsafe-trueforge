@@ -5,6 +5,16 @@ import { IncidentStore } from './incident/incident-store.js';
 import { createFailSafeMcpServer } from './mcp/server.js';
 
 const publicDirectory = fileURLToPath(new URL('../public', import.meta.url));
+const loopbackHosts = new Set(['localhost', '127.0.0.1', '::1']);
+
+function requestHost(request: Request): string {
+  const authority = request.headers.host ?? '';
+  if (authority.startsWith('[')) {
+    const closingBracket = authority.indexOf(']');
+    return closingBracket === -1 ? '' : authority.slice(1, closingBracket);
+  }
+  return authority.split(':', 1)[0] ?? '';
+}
 
 function methodNotAllowed(response: Response): void {
   response
@@ -21,6 +31,13 @@ export function createApp(store = new IncidentStore()): Express {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '1mb' }));
+  app.use((request, response, next) => {
+    if (!loopbackHosts.has(requestHost(request))) {
+      response.status(403).json({ error: 'Invalid host' });
+      return;
+    }
+    next();
+  });
 
   app.get('/api/health', (_request, response) => {
     response.json({ status: 'ok', product: 'FailSafe', incidentId: store.getIncidentBrief().id });

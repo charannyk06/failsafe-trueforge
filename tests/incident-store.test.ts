@@ -101,4 +101,31 @@ describe('IncidentStore', () => {
       activeRevision: BAD_REVISION,
     });
   });
+
+  it('keeps timeline, rollback, metrics, and verification timestamps monotonic', () => {
+    const store = new IncidentStore();
+    for (let index = 0; index < 12; index += 1) {
+      store.recordTimeline(`Investigation note ${index + 1}`, 'test-agent');
+    }
+    store.restartService('checkout-api', 'Prove restart retains the bad revision');
+    store.rollbackDeployment({
+      service: 'checkout-api',
+      deploymentId: BAD_DEPLOYMENT_ID,
+      targetRevision: STABLE_REVISION,
+      reason: 'Restore the last known-good connection budget',
+    });
+
+    const snapshot = store.snapshot();
+    const timelineTimes = snapshot.timeline.map(event => new Date(event.timestamp).getTime());
+    expect(timelineTimes).toEqual([...timelineTimes].sort((left, right) => left - right));
+    const rollbackTime = timelineTimes.at(-1)!;
+    const recoverySamples = snapshot.metrics.flatMap(series =>
+      series.points.map(point => new Date(point.timestamp).getTime()),
+    );
+    expect(Math.min(...recoverySamples)).toBeGreaterThan(rollbackTime);
+    expect(new Date(snapshot.recovery.checkedAt).getTime()).toBeGreaterThan(Math.max(...recoverySamples));
+
+    store.reset();
+    expect(store.recordTimeline('First note after reset', 'test-agent').timestamp).toBe('2026-08-26T14:06:30.000Z');
+  });
 });

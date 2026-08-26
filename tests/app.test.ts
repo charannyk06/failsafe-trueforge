@@ -1,9 +1,15 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { Server } from 'node:http';
+import { execFile } from 'node:child_process';
+import { request as httpRequest, type Server } from 'node:http';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { BAD_REVISION } from '../src/incident/incident-store.js';
+
+const execFileAsync = promisify(execFile);
+const resetScript = fileURLToPath(new URL('../scripts/reset-demo.mjs', import.meta.url));
 
 async function listen(): Promise<{ server: Server; baseUrl: string }> {
   const server = createApp().listen(0, '127.0.0.1');
@@ -14,6 +20,32 @@ async function listen(): Promise<{ server: Server; baseUrl: string }> {
   const address = server.address();
   if (address === null || typeof address === 'string') throw new Error('Expected a TCP listener');
   return { server, baseUrl: `http://127.0.0.1:${address.port}` };
+}
+
+async function requestWithHost(baseUrl: string, host: string): Promise<{ status: number; body: unknown }> {
+  const url = new URL('/api/health', baseUrl);
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(
+      {
+        hostname: url.hostname,
+        port: url.port,
+        path: url.pathname,
+        headers: { host },
+      },
+      response => {
+        let body = '';
+        response.setEncoding('utf8');
+        response.on('data', chunk => {
+          body += chunk;
+        });
+        response.on('end', () => {
+          resolve({ status: response.statusCode ?? 0, body: JSON.parse(body) });
+        });
+      },
+    );
+    request.on('error', reject);
+    request.end();
+  });
 }
 
 describe('FailSafe HTTP app', () => {
@@ -59,6 +91,32 @@ describe('FailSafe HTTP app', () => {
     expect(styleResponse.headers.get('content-type')).toContain('text/css');
     expect(scriptResponse.status).toBe(200);
     expect(scriptResponse.headers.get('content-type')).toContain('javascript');
+    const script = await scriptResponse.text();
+    expect(script).toContain('LAB API ONLINE');
+    expect(script).not.toContain('MCP ONLINE');
+  });
+
+  it('rejects non-loopback Host headers before serving any route', async () => {
+    const running = await listen();
+    server = running.server;
+
+    const response = await requestWithHost(running.baseUrl, 'attacker.example');
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: 'Invalid host' });
+  });
+
+  it('resets successfully when FAILSAFE_URL has a trailing slash', async () => {
+    const running = await listen();
+    server = running.server;
+
+    const result = await execFileAsync(process.execPath, [resetScript], {
+      env: { ...process.env, FAILSAFE_URL: `${running.baseUrl}/` },
+    });
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      incidentId: 'INC-2048',
+      status: 'investigating',
+      reset: true,
+    });
   });
 
   it('serves successful Streamable HTTP MCP discovery and tool calls', async () => {
