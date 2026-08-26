@@ -6,6 +6,13 @@ FailSafe is a TrueForge-powered incident commander that earns permission to act.
 
 The included checkout outage is deterministic and explicitly synthetic. It is designed to make every part of the agent harness visible, repeatable, and safe to judge.
 
+## Demo
+
+- Three-minute video: [FailSafe: The Incident Agent You Can Trust With Root](https://youtu.be/WHKEKvfC-dI)
+- Reproducible runbook: [`docs/demo-runbook.md`](docs/demo-runbook.md)
+
+The video uses the same deterministic synthetic incident and checked-in TrueForge agent manifest. It does not claim access to a production system.
+
 ![FailSafe investigating state](docs/assets/failsafe-investigating.png)
 
 <details>
@@ -176,6 +183,8 @@ pnpm check               # complete local gate
 
 The verified gate currently covers:
 
+**17 passing tests** across unit, HTTP, MCP, server-binding, and monotonic-timeline behavior.
+
 - state transitions and unsafe rollback refusal
 - restart-without-recovery behavior
 - post-rollback evidence timing
@@ -200,7 +209,7 @@ docs/                    demo runbook and implementation plan
 
 Qodo Code Review is required for the hackathon. Every substantive change is delivered through a pull request. This section will link the reviewed pull request and summarize valid findings, applied fixes, and any publicly reasoned dismissals before final submission.
 
-- Reviewed pull request: pending
+- Reviewed pull request: [PR #1](https://github.com/charannyk06/failsafe-trueforge/pull/1)
 - Valid High findings: pending review
 - Follow-up review after fixes: pending
 
