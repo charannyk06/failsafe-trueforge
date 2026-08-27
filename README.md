@@ -215,7 +215,7 @@ GitHub Actions runs the same `pnpm check` gate on every pull request and push to
 
 The verified gate currently covers:
 
-**22 passing tests** across unit, HTTP, MCP, TrueForge contract, server-binding, and monotonic-timeline behavior.
+**23 passing tests** across unit, HTTP, MCP, TrueForge-contract, server-binding, and monotonic-timeline behavior.
 
 - state transitions and unsafe rollback refusal
 - restart-without-recovery behavior
