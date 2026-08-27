@@ -68,7 +68,7 @@ pnpm start
 
 Start TrueForge `0.1.4` separately, configure any supported model provider plus Daytona, run `FAILSAFE_MODEL=provider/model pnpm trueforge:configure`, and follow the [three-minute runbook](demo-runbook.md).
 
-The fixture always starts degraded on rc3. It always rejects unsafe rollback targets. Restart never recovers it. The valid rollback produces post-action metrics and a resolved dashboard on rc2. Twenty-two automated tests cover the state machine, complete MCP annotation matrix, read-tool immutability, TrueForge manifest contract, Streamable HTTP transport, server boundary, static UI, timing, and audit ordering.
+The fixture always starts degraded on rc3. It always rejects unsafe rollback targets. Restart never recovers it. The valid rollback produces post-action metrics and a resolved dashboard on rc2. Twenty-three automated tests cover the state machine, complete MCP annotation matrix, read-tool immutability, TrueForge manifest contract, Streamable HTTP transport, server boundary, static UI, timing, audit ordering, and a behavioral Daytona success path through agent creation.
 
 ## What the demo shows
 
