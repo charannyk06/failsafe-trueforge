@@ -4,6 +4,8 @@ A chatbot can tell an operator to roll back a deployment. An incident agent can 
 
 FailSafe is our Agent Harness Hackathon entry. It uses TrueForge to investigate a deterministic synthetic checkout outage, delegate bounded investigations, run generated analysis code in a sandbox, stop before remediation, and verify recovery from measurements taken after the action.
 
+![FailSafe investigating a synthetic checkout outage](assets/failsafe-investigating.png)
+
 ## The job we gave the agent
 
 The incident is intentionally narrow. Release candidate three increases each checkout replica's database pool from 20 to 80 connections and reduces the acquisition timeout to 250 milliseconds. Six replicas can demand 480 connections from a Postgres instance capped at 200. Errors, latency, saturation, and conversion all degrade.

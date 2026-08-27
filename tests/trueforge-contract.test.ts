@@ -30,4 +30,15 @@ describe('TrueForge integration contract', () => {
     expect(configureScript).toContain("request('/settings/sandbox-providers')");
     expect(configureScript).toContain("sandboxProvider?.manifest?.type !== 'daytona'");
   });
+
+  it('keeps the merged Qodo Daytona review evidence in public judge documentation', () => {
+    const readme = readProjectFile('README.md');
+    const judgesGuide = readProjectFile('docs/judges-guide.md');
+
+    expect(readme).toContain('https://github.com/charannyk06/failsafe-trueforge/pull/3#discussion_r3868465612');
+    expect(readme).toContain('sandboxProvider.manifest.type');
+    expect(readme).toContain('serves a representative nested Daytona response and proves configuration reaches agent creation');
+    expect(readme).toContain('reported 0 bugs and the High finding resolved on the final head');
+    expect(judgesGuide).toContain('valid High finding, nested-manifest behavioral fix, clean follow-up (0 bugs; finding resolved), and merge');
+  });
 });

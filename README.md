@@ -11,7 +11,7 @@ The included checkout outage is deterministic and explicitly synthetic. It is de
 1. Watch the [three-minute demo](https://youtu.be/WHKEKvfC-dI).
 2. Open the [judges' guide](docs/judges-guide.md) for a criterion-by-criterion evidence map.
 3. Inspect the [threat model](docs/threat-model.md) and checked-in [TrueForge agent manifest](trueforge/failsafe-agent.json).
-4. Run `pnpm install && pnpm check` to execute the complete 19-test gate.
+4. Run `pnpm install && pnpm check` to execute the complete 25-test gate.
 5. Read the public [field report](docs/field-report.md) for the architecture, failures, fixes, and design reasoning.
 
 FailSafe is strongest when judged as one complete control loop: **observe, delegate, calculate, ask, act, verify**.
@@ -215,7 +215,7 @@ GitHub Actions runs the same `pnpm check` gate on every pull request and push to
 
 The verified gate currently covers:
 
-**23 passing tests** across unit, HTTP, MCP, TrueForge-contract, server-binding, and monotonic-timeline behavior.
+**25 passing tests** across unit, HTTP, MCP, TrueForge-contract, server-binding, and monotonic-timeline behavior.
 
 - state transitions and unsafe rollback refusal
 - restart-without-recovery behavior
@@ -241,7 +241,7 @@ docs/                    demo runbook and implementation plan
 
 ## Qodo Code Review Evidence
 
-Every substantive implementation change was kept in [PR #1](https://github.com/charannyk06/failsafe-trueforge/pull/1) until Qodo's review and remediation loop completed. The initial Qodo review produced six actionable findings: one High, four Medium, and one Low. All six were treated as valid and fixed; none were dismissed.
+The initial implementation remained in [PR #1](https://github.com/charannyk06/failsafe-trueforge/pull/1) until Qodo's review and remediation loop completed. That review produced six actionable findings: one High, four Medium, and one Low. All six were treated as valid and fixed; none were dismissed.
 
 - **High, fixed:** [resolution bypassed explicit verification](https://github.com/charannyk06/failsafe-trueforge/pull/1#discussion_r3867701562). Rollback now leaves the incident investigating, reports recovery as pending, and only `verify_recovery` records the recovery event and resolved timestamp.
 - **Medium, fixed:** [restart logs moved backward](https://github.com/charannyk06/failsafe-trueforge/pull/1#discussion_r3867701566) and [pre-rollback verification timestamps could predate evidence](https://github.com/charannyk06/failsafe-trueforge/pull/1#discussion_r3867701582). Action logs and verification now derive from the latest evidence timestamp and remain monotonic.
@@ -251,6 +251,10 @@ Every substantive implementation change was kept in [PR #1](https://github.com/c
 - **Additional hardening:** an independent security pass found that a hostile browser Origin could reach the loopback mutation surface. Non-loopback Origins are now rejected before JSON parsing, with regression coverage.
 - **Dismissed findings:** none.
 - **Follow-up:** `/agentic_review` was triggered on this exact remediation and evidence head. The final Qodo result and public discussion trail are attached to PR #1; merge remained blocked until that follow-up completed.
+
+- **PR #3 High, fixed:** [Qodo correctly found](https://github.com/charannyk06/failsafe-trueforge/pull/3#discussion_r3868465612) that the Daytona preflight checked `sandboxProvider.type` even though TrueForge returns the type at `sandboxProvider.manifest.type`. The script now validates the nested manifest.
+- **Behavioral proof:** [`trueforge-configure.test.ts`](tests/trueforge-configure.test.ts) serves a representative nested Daytona response and proves configuration reaches agent creation.
+- **Follow-up and merge:** [Qodo's follow-up](https://github.com/charannyk06/failsafe-trueforge/pull/3#issuecomment-5433962122) reported 0 bugs and the High finding resolved on the final head; [PR #3](https://github.com/charannyk06/failsafe-trueforge/pull/3) then merged.
 
 ## AI tool-use disclosure
 

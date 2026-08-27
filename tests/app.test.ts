@@ -83,17 +83,66 @@ describe('FailSafe HTTP app', () => {
     expect(page).toContain('<title>FailSafe Incident Console</title>');
     expect(page).toContain('HUMAN APPROVAL BARRIER');
 
-    const [styleResponse, scriptResponse] = await Promise.all([
+    const [styleResponse, scriptResponse, faviconResponse] = await Promise.all([
       fetch(`${running.baseUrl}/styles.css`),
       fetch(`${running.baseUrl}/app.js`),
+      fetch(`${running.baseUrl}/favicon.svg`),
     ]);
     expect(styleResponse.status).toBe(200);
     expect(styleResponse.headers.get('content-type')).toContain('text/css');
     expect(scriptResponse.status).toBe(200);
     expect(scriptResponse.headers.get('content-type')).toContain('javascript');
+    expect(faviconResponse.status).toBe(200);
+    expect(faviconResponse.headers.get('content-type')).toContain('image/svg+xml');
     const script = await scriptResponse.text();
     expect(script).toContain('LAB API ONLINE');
     expect(script).not.toContain('MCP ONLINE');
+  });
+
+  it('keeps the static incident console operational before state sync', async () => {
+    const running = await listen();
+    server = running.server;
+
+    const [pageResponse, styleResponse] = await Promise.all([
+      fetch(`${running.baseUrl}/`),
+      fetch(`${running.baseUrl}/styles.css`),
+    ]);
+    const page = await pageResponse.text();
+    const styles = await styleResponse.text();
+
+    expect(pageResponse.headers.get('cache-control')).toBe('no-store');
+    expect(page).not.toContain('__FAILSAFE_INITIAL_STATE__');
+    expect(page).toContain('<script id="initial-state" type="application/json">{"incident":');
+    expect(page).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml" />');
+    expect(page).toContain('<a class="brand" href="/">');
+    expect(page).not.toContain('aria-label="FailSafe home"');
+
+    expect(page).not.toContain('class="section-index"');
+    expect([...page.matchAll(/<li data-stage="[^"]+"><span>(0[1-5])<\/span>/g)].map(match => match[1])).toEqual([
+      '01', '02', '03', '04', '05',
+    ]);
+    expect(page).toContain('<h2 id="services-title">Service health</h2>');
+    expect(page).toContain('<h2 id="command-title">Response plan</h2>');
+    expect(page).not.toContain('Service field');
+    expect(page).not.toContain('Agent command rail');
+
+    expect(page).toContain('Checkout failures after rc3 deployment');
+    expect(page).toContain('31% drop in checkout conversion; 27.4% of checkout requests failing.');
+    expect(page).toContain('Started 14:04:02Z');
+
+    expect(page).toContain('<span class="environment">SYNTHETIC PRODUCTION</span>');
+    const mobileStyles = styles.slice(styles.indexOf('@media (max-width: 680px)'));
+    expect(mobileStyles).toContain('.masthead-center { display: flex;');
+    expect(mobileStyles).toContain('.masthead-center .eyebrow, .masthead-center .separator { display: none; }');
+    expect(mobileStyles).toContain('.connection .pulse { display: block; }');
+
+    expect(styles).not.toContain('clamp(');
+    expect(styles).toContain('--faint: #81827e;');
+    expect(styles).not.toContain('opacity: .48;');
+    expect(styles).toMatch(/h1 \{[^}]*font-size: 56px;/);
+    expect(styles).toMatch(/\.metric-value \{[^}]*font: 600 36px\/1 var\(--mono\);/);
+    expect(styles).toMatch(/\.causality h3 \{[^}]*font-size: 36px;/);
+    expect(mobileStyles).toMatch(/h1 \{[^}]*font-size: 42px;/);
   });
 
   it('rejects non-loopback Host headers before serving any route', async () => {
