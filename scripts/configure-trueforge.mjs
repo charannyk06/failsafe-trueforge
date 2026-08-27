@@ -39,7 +39,7 @@ try {
     `FailSafe requires a configured Daytona sandbox provider for generated code. Open TrueForge Settings → Sandbox providers, configure Daytona, and rerun this command. ${error instanceof Error ? error.message : String(error)}`,
   );
 }
-if (sandboxProvider?.type !== 'daytona') {
+if (sandboxProvider?.manifest?.type !== 'daytona') {
   throw new Error('FailSafe requires the supported Daytona sandbox provider before the agent can be configured.');
 }
 
@@ -82,6 +82,6 @@ console.log(JSON.stringify({
   tools: tools.length,
   approvals: saved.manifest.mcp_servers[0]?.require_approval_for_tools,
   sandbox: saved.manifest.config.sandbox.enabled,
-  sandboxProvider: sandboxProvider.type,
+  sandboxProvider: sandboxProvider.manifest.type,
   dynamicSubAgents: saved.manifest.config.dynamic_sub_agents.enabled,
 }, null, 2));
