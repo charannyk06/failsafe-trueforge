@@ -28,6 +28,6 @@ describe('TrueForge integration contract', () => {
     expect(readme).toContain('npx @truefoundry/trueforge@0.1.4 --port 8790');
     expect(readme).toContain('Daytona sandbox provider');
     expect(configureScript).toContain("request('/settings/sandbox-providers')");
-    expect(configureScript).toContain("sandboxProvider?.type !== 'daytona'");
+    expect(configureScript).toContain("sandboxProvider?.manifest?.type !== 'daytona'");
   });
 });
