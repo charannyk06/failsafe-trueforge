@@ -218,5 +218,8 @@ resetButton.addEventListener('click', async () => {
   }
 });
 
+const initialState = document.querySelector('#initial-state')?.textContent;
+if (initialState?.startsWith('{')) render(JSON.parse(initialState));
+
 await syncState();
 setInterval(syncState, 1500);
