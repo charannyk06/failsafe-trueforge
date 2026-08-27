@@ -1,11 +1,19 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { IncidentStore } from './incident/incident-store.js';
 import { createFailSafeMcpServer } from './mcp/server.js';
 
 const publicDirectory = fileURLToPath(new URL('../public', import.meta.url));
+const indexTemplate = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+const initialStateMarker = '__FAILSAFE_INITIAL_STATE__';
 const loopbackHosts = new Set(['localhost', '127.0.0.1', '::1']);
+
+function renderIndex(initialState: ReturnType<IncidentStore['snapshot']>): string {
+  const serializedState = JSON.stringify(initialState).replaceAll('<', '\\u003c');
+  return indexTemplate.replace(initialStateMarker, serializedState);
+}
 
 function requestHost(request: Request): string {
   const authority = request.headers.host ?? '';
@@ -82,6 +90,13 @@ export function createApp(store = new IncidentStore()): Express {
 
   app.post('/api/reset', (_request, response) => {
     response.set('Cache-Control', 'no-store').json(store.reset());
+  });
+
+  app.get(['/', '/index.html'], (_request, response) => {
+    response
+      .set('Cache-Control', 'no-store')
+      .type('html')
+      .send(renderIndex(store.snapshot()));
   });
 
   app.post('/mcp', async (request: Request, response: Response) => {
