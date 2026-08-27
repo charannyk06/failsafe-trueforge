@@ -24,9 +24,10 @@ const EXPECTED_TOOLS = [
 describe('FailSafe MCP server', () => {
   let client: Client;
   let server: ReturnType<typeof createFailSafeMcpServer>;
+  let store: IncidentStore;
 
   beforeEach(async () => {
-    const store = new IncidentStore();
+    store = new IncidentStore();
     server = createFailSafeMcpServer(store);
     client = new Client({ name: 'failsafe-test-client', version: '0.1.0' });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -39,19 +40,78 @@ describe('FailSafe MCP server', () => {
     await server.close();
   });
 
-  it('publishes the complete tool surface with approval-driving annotations', async () => {
+  it('publishes the complete ten-tool policy matrix', async () => {
     const tools = await client.listTools();
 
     expect(tools.tools.map(tool => tool.name)).toEqual(EXPECTED_TOOLS);
-    expect(tools.tools.find(tool => tool.name === 'metrics_query')?.annotations).toMatchObject({
+    const policy = Object.fromEntries(
+      tools.tools.map(tool => [
+        tool.name,
+        {
+          readOnlyHint: tool.annotations?.readOnlyHint,
+          destructiveHint: tool.annotations?.destructiveHint,
+          idempotentHint: tool.annotations?.idempotentHint,
+          openWorldHint: tool.annotations?.openWorldHint,
+        },
+      ]),
+    );
+    const readPolicy = {
       readOnlyHint: true,
       destructiveHint: false,
-    });
-    expect(tools.tools.find(tool => tool.name === 'rollback_deployment')?.annotations).toMatchObject({
-      readOnlyHint: false,
-      destructiveHint: true,
       idempotentHint: true,
+      openWorldHint: false,
+    };
+    expect(policy).toEqual({
+      incident_brief: readPolicy,
+      service_health: readPolicy,
+      metrics_query: readPolicy,
+      logs_search: readPolicy,
+      recent_deployments: readPolicy,
+      deployment_diff: readPolicy,
+      timeline_record: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+      restart_service: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+      rollback_deployment: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      verify_recovery: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     });
+  });
+
+  it('keeps every read-only tool byte-for-byte state preserving', async () => {
+    const before = store.snapshot();
+    const calls = [
+      { name: 'incident_brief', arguments: {} },
+      { name: 'service_health', arguments: {} },
+      { name: 'metrics_query', arguments: {} },
+      { name: 'logs_search', arguments: { query: '', limit: 50 } },
+      { name: 'recent_deployments', arguments: {} },
+      { name: 'deployment_diff', arguments: { deploymentId: BAD_DEPLOYMENT_ID } },
+    ];
+
+    for (const call of calls) {
+      const result = await client.callTool(call);
+      expect(result.isError).not.toBe(true);
+    }
+
+    expect(store.snapshot()).toEqual(before);
   });
 
   it('exposes structured incident evidence', async () => {

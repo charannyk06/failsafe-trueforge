@@ -10,10 +10,10 @@
    pnpm start
    ```
 
-2. Start TrueForge in another terminal:
+2. Configure Daytona under **TrueForge Settings → Sandbox providers**, then start the tested TrueForge release in another terminal:
 
    ```bash
-   npx @truefoundry/trueforge --port 8790
+   npx @truefoundry/trueforge@0.1.4 --port 8790
    ```
 
 3. Add any supported model provider in TrueForge Settings. The checked-in manifest defaults to `openrouter/gemini-2.5-flash`; override it without editing files:

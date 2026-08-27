@@ -16,7 +16,7 @@
         "enable_tools": ["@all"],
         "disable_tools": [],
         "preload_tools": ["incident_brief", "service_health"],
-        "require_approval_for_tools": ["@write", "@destructive"],
+        "require_approval_for_tools": ["timeline_record", "restart_service", "rollback_deployment"],
         "preload": false
       }
     ],

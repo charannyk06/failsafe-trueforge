@@ -8,6 +8,14 @@ const read = (title: string): ToolAnnotations => ({
   openWorldHint: false,
 });
 
+const auditWrite = (title: string): ToolAnnotations => ({
+  title,
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+});
+
 export const TOOL_ANNOTATIONS = {
   incident_brief: read('Read incident brief'),
   service_health: read('Read service health'),
@@ -36,7 +44,7 @@ export const TOOL_ANNOTATIONS = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  verify_recovery: read('Verify incident recovery'),
+  verify_recovery: auditWrite('Record verified incident recovery'),
 } as const satisfies Record<string, ToolAnnotations>;
 
 export type ToolName = keyof typeof TOOL_ANNOTATIONS;

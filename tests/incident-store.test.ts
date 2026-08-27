@@ -75,6 +75,9 @@ describe('IncidentStore', () => {
     expect(recovery.verified).toBe(true);
     expect(recovery.checks).toHaveLength(4);
     expect(recovery.checks.every(check => check.passed)).toBe(true);
+    const verifiedSnapshot = store.snapshot();
+    expect(store.verifyRecovery()).toEqual(recovery);
+    expect(store.snapshot()).toEqual(verifiedSnapshot);
     const postRollbackSamples = store.queryMetrics().map(series => series.points.at(-1)?.timestamp);
     expect(postRollbackSamples.every(timestamp => timestamp !== undefined)).toBe(true);
     for (const timestamp of postRollbackSamples) {
