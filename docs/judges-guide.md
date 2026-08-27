@@ -16,7 +16,7 @@ FailSafe is a TrueForge incident commander for one narrow, high-stakes job: diag
 |---|---|---|
 | Potential impact | Incident responders get an evidence-backed control loop instead of a model that declares success after calling a tool. | [Demo 0:00 to 0:20](https://youtu.be/WHKEKvfC-dI), [incident model](../src/incident/incident-store.ts) |
 | Creativity and originality | Authority is earned in stages: observe, delegate, calculate, ask, act, verify. Recovery is a measured predicate, not model prose. | [Demo 1:40 to 2:59](https://youtu.be/WHKEKvfC-dI), [`verify_recovery`](../src/mcp/tool-definitions.ts) |
-| Technical excellence | Strict TypeScript, deterministic state transitions, live Streamable HTTP MCP coverage, loopback binding, monotonic evidence timing, CI, and 23 automated tests. | [CI workflow](../.github/workflows/ci.yml), [tests](../tests/) |
+| Technical excellence | Strict TypeScript, deterministic state transitions, live Streamable HTTP MCP coverage, loopback binding, monotonic evidence timing, CI, and 25 automated tests. | [CI workflow](../.github/workflows/ci.yml), [tests](../tests/) |
 | Sponsor tools | TrueForge owns the saved agent, MCP connector, sandbox, dynamic subagents, approval policy, session continuity, and recovery turn. | [Demo 0:20 to 2:35](https://youtu.be/WHKEKvfC-dI), [configuration script](../scripts/configure-trueforge.mjs) |
 | Control and safety | Generated code runs in Daytona. The three human-controlled mutations stop for approval. Rollback validates exact targets and is idempotent. The non-destructive verification audit write is explicit and policy-exempt. | [Threat model](threat-model.md), [demo 1:20 to 2:55](https://youtu.be/WHKEKvfC-dI) |
 | Presentation | One synthetic incident tells the whole story, with real TrueForge evidence, authored captions, a live state transition, and no private data. | [Demo video](https://youtu.be/WHKEKvfC-dI), [runbook](demo-runbook.md) |
@@ -51,3 +51,4 @@ All incident data is deterministic and explicitly synthetic. The server binds to
 - Representative pull request: <https://github.com/charannyk06/failsafe-trueforge/pull/1>
 - Demo: <https://youtu.be/WHKEKvfC-dI>
 - Qodo trail: [PR #1](https://github.com/charannyk06/failsafe-trueforge/pull/1) records the initial six findings, fixes, follow-up review on the final implementation head, and clean merge.
+- Qodo Daytona response-shape trail: [PR #3](https://github.com/charannyk06/failsafe-trueforge/pull/3) records the valid High finding, nested-manifest behavioral fix, clean follow-up (0 bugs; finding resolved), and merge.
