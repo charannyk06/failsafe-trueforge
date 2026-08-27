@@ -16,8 +16,8 @@ The model is only one component. TrueForge provides the control plane around it:
 
 1. **MCP connectivity** exposes ten purpose-built incident tools.
 2. **Dynamic subagents** split telemetry, deployment causality, and remediation safety into bounded lanes.
-3. **Sandboxed Code Mode** executes one generated Python correlation calculation without host access.
-4. **Tool policy** blocks write and destructive calls for human approval.
+3. **Sandboxed Code Mode** executes one generated Python correlation calculation in Daytona without host access.
+4. **Tool policy** blocks the three human-controlled mutation tools for approval while allowing deterministic verification to record its audit result.
 5. **Session history** preserves the investigation and approval state across reconnects.
 6. **Post-action orchestration** keeps the same session alive long enough to verify recovery.
 
@@ -43,6 +43,8 @@ The review loop found several issues that looked small but weakened the safety s
 - Early tests exercised MCP in memory but did not cover the deployed Streamable HTTP path. A client-transport integration test now discovers and calls tools through `/mcp`.
 - Qodo found that rollback alone marked the incident resolved. Resolution is now gated on an explicit `verify_recovery` call, with monotonic action and verification timestamps.
 - Qodo also tightened the transport contract: malformed MCP JSON returns JSON-RPC `-32700`, every non-POST method returns `405`, and the documented runtime now matches TrueForge's Node.js 22 prerequisite.
+- A later security pass caught that `verify_recovery` was labeled read-only even though it records successful verification. It is now truthfully classified as an idempotent audit write, the approval policy names the three human-controlled mutations explicitly, and tests assert the entire tool-policy matrix plus read-tool immutability.
+- The clean-machine path previously omitted TrueForge's required sandbox provider. The runbook now pins TrueForge `0.1.4`, names Daytona as a prerequisite, and the configuration script fails fast when Daytona is missing.
 - An independent security pass found that hostile browser Origins could reach the loopback mutation surface. Host and Origin checks now run before JSON parsing and have regression coverage.
 - The first server bound to every interface. It now binds to loopback and rejects non-loopback Host values.
 - Custom audit events could move backward in time after a fixed rollback event. Timeline writes now advance monotonically using date arithmetic.
@@ -52,7 +54,7 @@ These fixes made the implementation more honest, not merely more polished.
 
 ## The safety boundary
 
-All incident data is synthetic. The MCP server is loopback-only. Read tools cannot mutate state. Restart and rollback are destructive. Rollback validates the exact service, deployment, and target revision, and repeating an approved rollback is idempotent. Generated code runs in the TrueForge sandbox. Credentials remain outside the repository.
+All incident data is synthetic. The MCP server is loopback-only. Six read tools are state-preserving. Human-controlled timeline, restart, and rollback mutations require approval. Recovery verification is an idempotent audit write that cannot alter service configuration. Rollback validates the exact service, deployment, and target revision, and repeating an approved rollback is idempotent. Generated code runs in Daytona through TrueForge. Credentials remain outside the repository.
 
 The project does not claim that a model should receive unrestricted production access. It demonstrates how a harness can narrow authority to one evidence-backed, human-approved operation.
 
@@ -64,9 +66,9 @@ pnpm check
 pnpm start
 ```
 
-Start TrueForge separately, configure any supported model provider, run `FAILSAFE_MODEL=provider/model pnpm trueforge:configure`, and follow the [three-minute runbook](demo-runbook.md).
+Start TrueForge `0.1.4` separately, configure any supported model provider plus Daytona, run `FAILSAFE_MODEL=provider/model pnpm trueforge:configure`, and follow the [three-minute runbook](demo-runbook.md).
 
-The fixture always starts degraded on rc3. It always rejects unsafe rollback targets. Restart never recovers it. The valid rollback produces post-action metrics and a resolved dashboard on rc2. Seventeen automated tests cover the state machine, MCP annotations, Streamable HTTP transport, server boundary, static UI, timing, and audit ordering.
+The fixture always starts degraded on rc3. It always rejects unsafe rollback targets. Restart never recovers it. The valid rollback produces post-action metrics and a resolved dashboard on rc2. Twenty-two automated tests cover the state machine, complete MCP annotation matrix, read-tool immutability, TrueForge manifest contract, Streamable HTTP transport, server boundary, static UI, timing, and audit ordering.
 
 ## What the demo shows
 
