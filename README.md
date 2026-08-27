@@ -11,7 +11,7 @@ The included checkout outage is deterministic and explicitly synthetic. It is de
 1. Watch the [three-minute demo](https://youtu.be/WHKEKvfC-dI).
 2. Open the [judges' guide](docs/judges-guide.md) for a criterion-by-criterion evidence map.
 3. Inspect the [threat model](docs/threat-model.md) and checked-in [TrueForge agent manifest](trueforge/failsafe-agent.json).
-4. Run `pnpm install && pnpm check` to execute the complete 17-test gate.
+4. Run `pnpm install && pnpm check` to execute the complete 19-test gate.
 5. Read the public [field report](docs/field-report.md) for the architecture, failures, fixes, and design reasoning.
 
 FailSafe is strongest when judged as one complete control loop: **observe, delegate, calculate, ask, act, verify**.

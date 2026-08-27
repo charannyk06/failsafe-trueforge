@@ -50,4 +50,4 @@ All incident data is deterministic and explicitly synthetic. The server binds to
 - Repository: <https://github.com/charannyk06/failsafe-trueforge>
 - Representative pull request: <https://github.com/charannyk06/failsafe-trueforge/pull/1>
 - Demo: <https://youtu.be/WHKEKvfC-dI>
-- Qodo trail: the README section is finalized after the required review and follow-up review complete on PR #1.
+- Qodo trail: [PR #1](https://github.com/charannyk06/failsafe-trueforge/pull/1) records the initial six findings, fixes, follow-up review on the final implementation head, and clean merge.
