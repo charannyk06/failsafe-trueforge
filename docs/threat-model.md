@@ -36,7 +36,7 @@ TrueForge is the policy boundary. It intercepts write and destructive MCP calls 
 | A restart is mistaken for recovery | Bad configuration remains active | Restart preserves rc3; `verify_recovery` remains false | Incident-store tests |
 | Stale metrics certify recovery | False success after remediation | Recovery samples occur after the rollback timestamp and before verification | Timing assertions in tests |
 | Generated code touches the host | Analysis can damage local files | Correlation code runs in the TrueForge sandbox | Demo 1:20 |
-| A LAN client calls the unauthenticated MCP endpoint | External mutation or fixture reset | Server binds to `127.0.0.1`; Host handling rejects non-loopback access | Server-binding tests |
+| A LAN or hostile browser client calls the unauthenticated MCP or reset endpoint | External mutation or fixture reset | Server binds to `127.0.0.1`; Host and Origin handling rejects non-loopback access before body parsing | HTTP and server-binding tests |
 | Timeline entries move backward | Misleading audit order | Custom events advance from the latest event with real date arithmetic | Monotonic-timeline tests |
 | Credentials leak through source or demo | Account compromise | Provider credentials stay in TrueForge settings; repo and video use synthetic data only | Public repository and release QA |
 

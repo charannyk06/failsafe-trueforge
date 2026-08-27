@@ -240,6 +240,7 @@ function clone<T>(value: T): T {
 
 export class IncidentStore {
   private rolledBack = false;
+  private recoveryVerifiedAt: string | null = null;
   private restartAttempts = 0;
   private customTimeline: TimelineEvent[] = [];
   private actionLogs: LogEntry[] = [];
@@ -248,6 +249,7 @@ export class IncidentStore {
 
   reset(): IncidentSnapshot {
     this.rolledBack = false;
+    this.recoveryVerifiedAt = null;
     this.restartAttempts = 0;
     this.customTimeline = [];
     this.actionLogs = [];
@@ -314,18 +316,20 @@ export class IncidentStore {
 
   restartService(service: ServiceName, reason: string) {
     this.restartAttempts += 1;
+    if (this.rolledBack) this.recoveryVerifiedAt = null;
     const operationId = `restart-${String(this.restartAttempts).padStart(3, '0')}`;
     const stillDegraded = !this.rolledBack && service === 'checkout-api';
+    const eventTimestamp = this.nextTimelineTimestamp();
     this.customTimeline.push({
       id: `evt-${String(this.customTimeline.length + 5).padStart(3, '0')}`,
-      timestamp: this.nextTimelineTimestamp(),
+      timestamp: eventTimestamp,
       kind: 'action',
       actor: 'failsafe-agent',
       summary: `Restarted ${service}: ${reason}`,
       evidence: stillDegraded ? 'Pods restarted on the same bad rc3 revision; incident persists.' : 'Restart completed.',
     });
     this.actionLogs.push({
-      timestamp: '2026-08-26T14:09:30.000Z',
+      timestamp: timeAfter(eventTimestamp, 5),
       level: stillDegraded ? 'ERROR' : 'INFO',
       service,
       message: stillDegraded
@@ -337,10 +341,12 @@ export class IncidentStore {
       service,
       status: stillDegraded ? ('completed_without_recovery' as const) : ('completed' as const),
       activeRevision: this.rolledBack && service === 'checkout-api' ? STABLE_REVISION : this.revisionFor(service),
-      incidentRecovered: this.rolledBack,
+      incidentRecovered: this.recoveryVerifiedAt !== null,
       message: stillDegraded
         ? 'Restart did not recover checkout-api because it relaunched the same bad deployment.'
-        : 'Service restart completed.',
+        : this.rolledBack
+          ? 'Service restart completed on the recovered revision. Run verify_recovery before closing the incident.'
+          : 'Service restart completed.',
     };
   }
 
@@ -356,8 +362,11 @@ export class IncidentStore {
         status: 'already_completed' as const,
         fromRevision: BAD_REVISION,
         toRevision: STABLE_REVISION,
-        incidentRecovered: true,
-        message: 'Rollback was already applied; no additional mutation performed.',
+        incidentRecovered: this.recoveryVerifiedAt !== null,
+        message:
+          this.recoveryVerifiedAt === null
+            ? 'Rollback was already applied; no additional mutation performed. Run verify_recovery before closing the incident.'
+            : 'Rollback was already applied and recovery was verified; no additional mutation performed.',
       };
     }
 
@@ -397,12 +406,29 @@ export class IncidentStore {
       status: 'completed' as const,
       fromRevision: BAD_REVISION,
       toRevision: STABLE_REVISION,
-      incidentRecovered: true,
+      incidentRecovered: false,
       message: 'Rollback completed. Run verify_recovery before closing the incident.',
     };
   }
 
   verifyRecovery(): RecoveryVerification {
+    const assessment = this.recoverySnapshot();
+    if (this.recoveryVerifiedAt === null && this.rolledBack && assessment.checks.every(check => check.passed)) {
+      const minimum = timeAfter(new Date(this.latestEvidenceTimeMs()).toISOString(), 10);
+      this.recoveryVerifiedAt = this.nextTimelineTimestamp(minimum);
+      this.customTimeline.push({
+        id: `evt-${String(this.customTimeline.length + 5).padStart(3, '0')}`,
+        timestamp: this.recoveryVerifiedAt,
+        kind: 'recovery',
+        actor: 'failsafe-agent',
+        summary: 'Verified incident recovery against all four post-rollback gates',
+        evidence: 'Checkout 5xx, p95 latency, database connections, and active revision are within policy.',
+      });
+    }
+    return this.recoverySnapshot();
+  }
+
+  private recoverySnapshot(): RecoveryVerification {
     const metrics = this.queryMetrics();
     const latest = (name: MetricName) => metrics.find(series => series.metric === name)!.points.at(-1)!.value;
     const checks = [
@@ -431,19 +457,24 @@ export class IncidentStore {
         passed: this.rolledBack,
       },
     ];
-    const verified = this.rolledBack && checks.every(check => check.passed);
+    const gatesPass = this.rolledBack && checks.every(check => check.passed);
+    const verified = this.recoveryVerifiedAt !== null && gatesPass;
     return {
       incidentId: INCIDENT_ID,
       verified,
       verdict: verified
         ? 'Recovery verified: checkout and database signals are within SLO on the last known-good revision.'
-        : 'Recovery not verified: rollback is required and one or more signals remain outside SLO.',
-      checkedAt: this.rolledBack ? timeAfter(this.rollbackAt!, 60) : '2026-08-26T14:10:00.000Z',
+        : gatesPass
+          ? 'Recovery gates pass, but the incident remains open until verify_recovery records the result.'
+          : 'Recovery not verified: rollback is required and one or more signals remain outside SLO.',
+      checkedAt:
+        this.recoveryVerifiedAt ?? timeAfter(new Date(this.latestEvidenceTimeMs()).toISOString(), 10),
       checks,
     };
   }
 
   snapshot(): IncidentSnapshot {
+    const incidentResolved = this.recoveryVerifiedAt !== null;
     const activeCheckoutRevision = this.rolledBack ? STABLE_REVISION : BAD_REVISION;
     const services: ServiceHealth[] = this.rolledBack
       ? [
@@ -464,10 +495,14 @@ export class IncidentStore {
         id: INCIDENT_ID,
         title: 'Checkout failures after rc3 deployment',
         severity: 'SEV-1',
-        status: this.rolledBack ? 'resolved' : 'investigating',
+        status: incidentResolved ? 'resolved' : 'investigating',
         startedAt: '2026-08-26T14:04:02.000Z',
-        resolvedAt: this.rolledBack ? timeAfter(this.rollbackAt!, 60) : null,
-        customerImpact: this.rolledBack ? 'Recovered; checkout success is 99.6%.' : '31% drop in checkout conversion; 27.4% of checkout requests failing.',
+        resolvedAt: this.recoveryVerifiedAt,
+        customerImpact: incidentResolved
+          ? 'Recovered; checkout success is 99.6%.'
+          : this.rolledBack
+            ? 'Recovery signals are within SLO; explicit verification is pending.'
+            : '31% drop in checkout conversion; 27.4% of checkout requests failing.',
         hypothesis: 'checkout-api rc3 multiplied connection demand beyond the Postgres 200-connection ceiling.',
         requiredRecoveryAction: `Roll back ${BAD_DEPLOYMENT_ID} to ${STABLE_REVISION}. A restart preserves the bad configuration and cannot recover the incident.`,
       },
@@ -482,12 +517,20 @@ export class IncidentStore {
         rollbackApplied: this.rolledBack,
         activeRevision: activeCheckoutRevision,
       },
-      recovery: this.verifyRecovery(),
+      recovery: this.recoverySnapshot(),
     };
   }
 
   private revisionFor(service: ServiceName): string {
     return this.getServiceHealth(service)[0]!.revision;
+  }
+
+  private latestEvidenceTimeMs(): number {
+    const metricTimestamps = this.queryMetrics().flatMap(series =>
+      series.points.map(point => new Date(point.timestamp).getTime()),
+    );
+    const logTimestamps = [...baseLogs, ...this.actionLogs].map(entry => new Date(entry.timestamp).getTime());
+    return Math.max(this.timelineCursorMs, ...metricTimestamps, ...logTimestamps);
   }
 
   private nextTimelineTimestamp(minimum?: string): string {

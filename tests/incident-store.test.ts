@@ -65,8 +65,12 @@ describe('IncidentStore', () => {
       status: 'completed',
       fromRevision: BAD_REVISION,
       toRevision: STABLE_REVISION,
-      incidentRecovered: true,
+      incidentRecovered: false,
     });
+    const pendingVerification = store.snapshot();
+    expect(pendingVerification.incident).toMatchObject({ status: 'investigating', resolvedAt: null });
+    expect(pendingVerification.recovery.verified).toBe(false);
+    expect(pendingVerification.recovery.checks.every(check => check.passed)).toBe(true);
     const recovery = store.verifyRecovery();
     expect(recovery.verified).toBe(true);
     expect(recovery.checks).toHaveLength(4);
@@ -78,7 +82,10 @@ describe('IncidentStore', () => {
       expect(new Date(timestamp!).getTime()).toBeLessThan(new Date(recovery.checkedAt).getTime());
     }
     expect(store.snapshot().incident.status).toBe('resolved');
-    expect(store.rollbackDeployment(input).status).toBe('already_completed');
+    expect(store.rollbackDeployment(input)).toMatchObject({
+      status: 'already_completed',
+      incidentRecovered: true,
+    });
   });
 
   it('refuses an unsafe rollback target and resets deterministically', () => {
@@ -108,6 +115,15 @@ describe('IncidentStore', () => {
       store.recordTimeline(`Investigation note ${index + 1}`, 'test-agent');
     }
     store.restartService('checkout-api', 'Prove restart retains the bad revision');
+    const failedRecovery = store.verifyRecovery();
+    const beforeRollback = store.snapshot();
+    const preRollbackEvidenceTimes = [
+      ...beforeRollback.timeline.map(event => new Date(event.timestamp).getTime()),
+      ...beforeRollback.logs.map(entry => new Date(entry.timestamp).getTime()),
+      ...beforeRollback.metrics.flatMap(series => series.points.map(point => new Date(point.timestamp).getTime())),
+    ];
+    expect(failedRecovery.verified).toBe(false);
+    expect(new Date(failedRecovery.checkedAt).getTime()).toBeGreaterThan(Math.max(...preRollbackEvidenceTimes));
     store.rollbackDeployment({
       service: 'checkout-api',
       deploymentId: BAD_DEPLOYMENT_ID,
@@ -115,15 +131,29 @@ describe('IncidentStore', () => {
       reason: 'Restore the last known-good connection budget',
     });
 
-    const snapshot = store.snapshot();
-    const timelineTimes = snapshot.timeline.map(event => new Date(event.timestamp).getTime());
-    expect(timelineTimes).toEqual([...timelineTimes].sort((left, right) => left - right));
-    const rollbackTime = timelineTimes.at(-1)!;
-    const recoverySamples = snapshot.metrics.flatMap(series =>
+    const pendingSnapshot = store.snapshot();
+    const pendingTimelineTimes = pendingSnapshot.timeline.map(event => new Date(event.timestamp).getTime());
+    expect(pendingTimelineTimes).toEqual([...pendingTimelineTimes].sort((left, right) => left - right));
+    const rollbackTime = pendingTimelineTimes.at(-1)!;
+    const recoverySamples = pendingSnapshot.metrics.flatMap(series =>
       series.points.map(point => new Date(point.timestamp).getTime()),
     );
     expect(Math.min(...recoverySamples)).toBeGreaterThan(rollbackTime);
-    expect(new Date(snapshot.recovery.checkedAt).getTime()).toBeGreaterThan(Math.max(...recoverySamples));
+    expect(new Date(pendingSnapshot.recovery.checkedAt).getTime()).toBeGreaterThan(Math.max(...recoverySamples));
+    expect(pendingSnapshot.incident.status).toBe('investigating');
+
+    const recovery = store.verifyRecovery();
+    const verifiedSnapshot = store.snapshot();
+    const verifiedTimelineTimes = verifiedSnapshot.timeline.map(event => new Date(event.timestamp).getTime());
+    expect(verifiedTimelineTimes).toEqual([...verifiedTimelineTimes].sort((left, right) => left - right));
+    expect(new Date(recovery.checkedAt).getTime()).toBeGreaterThan(Math.max(...recoverySamples));
+    expect(verifiedSnapshot.incident.resolvedAt).toBe(recovery.checkedAt);
+    expect(verifiedTimelineTimes.at(-1)).toBe(new Date(recovery.checkedAt).getTime());
+
+    const restartEvent = pendingSnapshot.timeline.find(event => event.summary.startsWith('Restarted checkout-api'))!;
+    const restartLog = pendingSnapshot.logs.find(entry => entry.message.includes('operation=restart-001'))!;
+    expect(new Date(restartLog.timestamp).getTime()).toBeGreaterThan(new Date(restartEvent.timestamp).getTime());
+    expect(new Date(restartLog.timestamp).getTime()).toBeLessThan(rollbackTime);
 
     store.reset();
     expect(store.recordTimeline('First note after reset', 'test-agent').timestamp).toBe('2026-08-26T14:06:30.000Z');

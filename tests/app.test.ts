@@ -105,6 +105,30 @@ describe('FailSafe HTTP app', () => {
     expect(response.body).toEqual({ error: 'Invalid host' });
   });
 
+  it('rejects cross-origin browser mutations while allowing loopback origins', async () => {
+    const running = await listen();
+    server = running.server;
+
+    for (const path of ['/api/reset', '/mcp']) {
+      const response = await fetch(`${running.baseUrl}${path}`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          origin: 'https://attacker.example',
+        },
+        body: '{}',
+      });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({ error: 'Invalid origin' });
+    }
+
+    const allowedResponse = await fetch(`${running.baseUrl}/api/reset`, {
+      method: 'POST',
+      headers: { origin: running.baseUrl },
+    });
+    expect(allowedResponse.status).toBe(200);
+  });
+
   it('resets successfully when FAILSAFE_URL has a trailing slash', async () => {
     const running = await listen();
     server = running.server;
@@ -139,13 +163,33 @@ describe('FailSafe HTTP app', () => {
     }
   });
 
-  it('rejects unsupported MCP methods and unknown routes', async () => {
+  it('returns JSON-RPC parse errors for malformed MCP JSON', async () => {
     const running = await listen();
     server = running.server;
 
-    const mcpResponse = await fetch(`${running.baseUrl}/mcp`);
-    expect(mcpResponse.status).toBe(405);
-    expect(mcpResponse.headers.get('allow')).toBe('POST');
+    const response = await fetch(`${running.baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"jsonrpc":',
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      jsonrpc: '2.0',
+      error: { code: -32700, message: 'Parse error: request body must contain valid JSON.' },
+      id: null,
+    });
+  });
+
+  it('rejects every unsupported MCP method and unknown routes', async () => {
+    const running = await listen();
+    server = running.server;
+
+    for (const method of ['GET', 'DELETE', 'PUT', 'PATCH', 'OPTIONS']) {
+      const mcpResponse = await fetch(`${running.baseUrl}/mcp`, { method });
+      expect(mcpResponse.status).toBe(405);
+      expect(mcpResponse.headers.get('allow')).toBe('POST');
+      expect(await mcpResponse.json()).toMatchObject({ jsonrpc: '2.0', id: null });
+    }
 
     const missingResponse = await fetch(`${running.baseUrl}/not-found`);
     expect(missingResponse.status).toBe(404);

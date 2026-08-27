@@ -73,7 +73,7 @@ describe('FailSafe MCP server', () => {
       },
     });
     expect(rollback.isError).not.toBe(true);
-    expect(rollback.structuredContent).toMatchObject({ status: 'completed', incidentRecovered: true });
+    expect(rollback.structuredContent).toMatchObject({ status: 'completed', incidentRecovered: false });
 
     const verification = await client.callTool({ name: 'verify_recovery', arguments: {} });
     expect(verification.structuredContent).toMatchObject({

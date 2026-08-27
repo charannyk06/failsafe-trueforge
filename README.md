@@ -97,7 +97,7 @@ flowchart LR
 
 ### Prerequisites
 
-- Node.js 20 or newer
+- Node.js 22 or newer
 - pnpm 11
 - a supported model provider configured in TrueForge
 
@@ -182,6 +182,7 @@ The fixture returns to `investigating` on rc3, ready for another run.
 - Repeating an approved rollback is idempotent.
 - A restart cannot falsely heal the fixture.
 - Recovery cannot pass until rollback is applied.
+- Rollback alone does not close the incident; only an explicit `verify_recovery` call records resolution after all four gates pass.
 - Recovery samples occur from `14:11:10Z` through `14:11:50Z`, after rollback at `14:11:00Z` and before verification at `14:12:00Z`.
 - No model or provider credentials are stored in this repository.
 
@@ -211,14 +212,15 @@ GitHub Actions runs the same `pnpm check` gate on every pull request and push to
 
 The verified gate currently covers:
 
-**17 passing tests** across unit, HTTP, MCP, server-binding, and monotonic-timeline behavior.
+**19 passing tests** across unit, HTTP, MCP, server-binding, and monotonic-timeline behavior.
 
 - state transitions and unsafe rollback refusal
 - restart-without-recovery behavior
 - post-rollback evidence timing
 - MCP tool discovery, annotations, calls, and error responses
 - dashboard and static asset delivery
-- health, state, 404, and method policy routes
+- Host and Origin rejection for the loopback-only mutation surface
+- JSON-RPC parse errors plus health, state, 404, and complete method-policy routes
 - clean compiled startup and remote Streamable HTTP discovery
 
 ## Repository layout
@@ -236,11 +238,16 @@ docs/                    demo runbook and implementation plan
 
 ## Qodo Code Review Evidence
 
-Qodo Code Review is required for the hackathon. Every substantive change is delivered through a pull request. This section will link the reviewed pull request and summarize valid findings, applied fixes, and any publicly reasoned dismissals before final submission.
+Every substantive implementation change was kept in [PR #1](https://github.com/charannyk06/failsafe-trueforge/pull/1) until Qodo's review and remediation loop completed. The initial Qodo review produced six actionable findings: one High, four Medium, and one Low. All six were treated as valid and fixed; none were dismissed.
 
-- Reviewed pull request: [PR #1](https://github.com/charannyk06/failsafe-trueforge/pull/1)
-- Valid High findings: pending review
-- Follow-up review after fixes: pending
+- **High, fixed:** [resolution bypassed explicit verification](https://github.com/charannyk06/failsafe-trueforge/pull/1#discussion_r3867701562). Rollback now leaves the incident investigating, reports recovery as pending, and only `verify_recovery` records the recovery event and resolved timestamp.
+- **Medium, fixed:** [restart logs moved backward](https://github.com/charannyk06/failsafe-trueforge/pull/1#discussion_r3867701566) and [pre-rollback verification timestamps could predate evidence](https://github.com/charannyk06/failsafe-trueforge/pull/1#discussion_r3867701582). Action logs and verification now derive from the latest evidence timestamp and remain monotonic.
+- **Medium, fixed:** [malformed MCP JSON escaped JSON-RPC](https://github.com/charannyk06/failsafe-trueforge/pull/1#discussion_r3867701570). Parse failures now return a protocol-shaped `-32700` error.
+- **Medium, fixed:** [the supported Node range was overstated](https://github.com/charannyk06/failsafe-trueforge/pull/1#discussion_r3867701574). The package and setup guide now require Node.js 22 or newer, matching TrueForge's current prerequisite.
+- **Low, fixed:** [unsupported MCP methods returned inconsistent errors](https://github.com/charannyk06/failsafe-trueforge/pull/1#discussion_r3867701587). Every non-POST method now returns `405` with `Allow: POST`.
+- **Additional hardening:** an independent security pass found that a hostile browser Origin could reach the loopback mutation surface. Non-loopback Origins are now rejected before JSON parsing, with regression coverage.
+- **Dismissed findings:** none.
+- **Follow-up:** `/agentic_review` was triggered on this exact remediation and evidence head. The final Qodo result and public discussion trail are attached to PR #1; merge remained blocked until that follow-up completed.
 
 ## AI tool-use disclosure
 

@@ -41,6 +41,9 @@ The review loop found several issues that looked small but weakened the safety s
 
 - Recovery metrics originally carried timestamps from before rollback. The fixture now emits a dedicated post-rollback series, and tests prove each sample is newer than the action.
 - Early tests exercised MCP in memory but did not cover the deployed Streamable HTTP path. A client-transport integration test now discovers and calls tools through `/mcp`.
+- Qodo found that rollback alone marked the incident resolved. Resolution is now gated on an explicit `verify_recovery` call, with monotonic action and verification timestamps.
+- Qodo also tightened the transport contract: malformed MCP JSON returns JSON-RPC `-32700`, every non-POST method returns `405`, and the documented runtime now matches TrueForge's Node.js 22 prerequisite.
+- An independent security pass found that hostile browser Origins could reach the loopback mutation surface. Host and Origin checks now run before JSON parsing and have regression coverage.
 - The first server bound to every interface. It now binds to loopback and rejects non-loopback Host values.
 - Custom audit events could move backward in time after a fixed rollback event. Timeline writes now advance monotonically using date arithmetic.
 - The initial dashboard label implied the browser was an MCP client. It now says `LAB API ONLINE`, matching the actual architecture.

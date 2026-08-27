@@ -1,5 +1,5 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import express, { type Express, type Request, type Response } from 'express';
+import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import { fileURLToPath } from 'node:url';
 import { IncidentStore } from './incident/incident-store.js';
 import { createFailSafeMcpServer } from './mcp/server.js';
@@ -16,6 +16,15 @@ function requestHost(request: Request): string {
   return authority.split(':', 1)[0] ?? '';
 }
 
+function isLoopbackOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return url.protocol === 'http:' && loopbackHosts.has(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function methodNotAllowed(response: Response): void {
   response
     .status(405)
@@ -27,16 +36,40 @@ function methodNotAllowed(response: Response): void {
     });
 }
 
+function isJsonParseError(error: unknown): boolean {
+  return error instanceof SyntaxError && (error as { type?: unknown }).type === 'entity.parse.failed';
+}
+
 export function createApp(store = new IncidentStore()): Express {
   const app = express();
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '1mb' }));
   app.use((request, response, next) => {
     if (!loopbackHosts.has(requestHost(request))) {
       response.status(403).json({ error: 'Invalid host' });
       return;
     }
+    const origin = request.headers.origin;
+    if (origin !== undefined && !isLoopbackOrigin(origin)) {
+      response.status(403).json({ error: 'Invalid origin' });
+      return;
+    }
     next();
+  });
+  app.use(express.json({ limit: '1mb' }));
+  app.use((error: unknown, request: Request, response: Response, next: NextFunction) => {
+    if (!isJsonParseError(error)) {
+      next(error);
+      return;
+    }
+    if (request.path === '/mcp') {
+      response.status(400).json({
+        jsonrpc: '2.0',
+        error: { code: -32700, message: 'Parse error: request body must contain valid JSON.' },
+        id: null,
+      });
+      return;
+    }
+    response.status(400).json({ error: 'Malformed JSON' });
   });
 
   app.get('/api/health', (_request, response) => {
@@ -78,8 +111,7 @@ export function createApp(store = new IncidentStore()): Express {
     }
   });
 
-  app.get('/mcp', (_request, response) => methodNotAllowed(response));
-  app.delete('/mcp', (_request, response) => methodNotAllowed(response));
+  app.all('/mcp', (_request, response) => methodNotAllowed(response));
 
   app.use(express.static(publicDirectory, { extensions: ['html'] }));
 

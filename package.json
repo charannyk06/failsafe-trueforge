@@ -5,7 +5,7 @@
   "description": "FailSafe — the incident-response agent you can trust with root.",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "packageManager": "pnpm@11.20.0",
   "scripts": {
