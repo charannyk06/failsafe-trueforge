@@ -51,7 +51,7 @@ TrueForge is not hidden under a chat wrapper. It owns the behaviors that make th
 
 - MCP discovery and classified tool execution
 - exactly three bounded dynamic subagents
-- generated Python running in the local sandbox
+- generated Python running in a Daytona-isolated sandbox
 - a real approval object that intercepts the rollback tool call
 - session and pending-approval continuity across reconnects
 - the recovery turn and event history after mutation
@@ -80,7 +80,7 @@ flowchart LR
     C --> T[Telemetry subagent]
     C --> D[Deployment subagent]
     C --> S[Safety subagent]
-    C --> SB[TrueForge sandbox]
+    C --> SB[Daytona sandbox via TrueForge]
     T --> MCP[FailSafe MCP server]
     D --> MCP
     S --> MCP
@@ -100,6 +100,7 @@ flowchart LR
 - Node.js 22 or newer
 - pnpm 11
 - a supported model provider configured in TrueForge
+- a Daytona account and sandbox provider configured under **TrueForge Settings → Sandbox providers**
 
 ### 1. Install and verify
 
@@ -121,7 +122,7 @@ Open the incident console at <http://localhost:3100>.
 In another terminal:
 
 ```bash
-npx @truefoundry/trueforge --port 8790
+npx @truefoundry/trueforge@0.1.4 --port 8790
 ```
 
 Configure a model provider in TrueForge Settings. The checked-in manifest defaults to `openrouter/gemini-2.5-flash`, but any configured supported model can be selected without editing files:
@@ -133,11 +134,12 @@ FAILSAFE_MODEL=provider/model pnpm trueforge:configure
 The configuration script:
 
 - verifies the selected model exists
+- fails fast unless the supported Daytona sandbox provider is configured
 - creates or replaces the `failsafe-incident-lab` MCP connector
-- requires approval for `@write` and `@destructive` tools
+- requires approval for exactly `timeline_record`, `restart_service`, and `rollback_deployment`
 - verifies all 10 tools are discoverable
 - creates or updates the `failsafe-commander` saved agent
-- enables the local sandbox and dynamic subagents
+- enables the Daytona sandbox and dynamic subagents
 
 Open TrueForge at <http://localhost:8790> and select **failsafe-commander**.
 
@@ -170,14 +172,15 @@ The fixture returns to `investigating` on rc3, ready for another run.
 | `timeline_record` | Add an audit note | write, approval required |
 | `restart_service` | Demonstrate an insufficient remediation | destructive, approval required |
 | `rollback_deployment` | Restore the last known-good revision | destructive, approval required |
-| `verify_recovery` | Evaluate post-action SLO gates | read-only |
+| `verify_recovery` | Evaluate gates and record verified recovery | idempotent audit write, no approval |
 
 ## Safety guarantees
 
 - The environment is labeled **synthetic** in the UI, agent instructions, and runbook.
 - The HTTP and MCP server binds only to `127.0.0.1`; it is not exposed to the LAN.
-- Read tools cannot mutate state.
-- Every write or destructive tool used through FailSafe Commander is blocked by TrueForge approval policy. Direct MCP access remains a local test interface only.
+- All six read-only tools are state-preserving; the complete annotation matrix and byte-for-byte snapshots are regression-tested.
+- TrueForge approval is required for the three human-controlled mutation tools: `timeline_record`, `restart_service`, and `rollback_deployment`. Direct MCP access remains a local test interface only.
+- `verify_recovery` is truthfully classified as an idempotent, non-destructive audit write. It can record a passing verification once but cannot change service configuration, so it is intentionally policy-exempt.
 - Rollback rejects the wrong service, deployment ID, or target revision.
 - Repeating an approved rollback is idempotent.
 - A restart cannot falsely heal the fixture.
@@ -212,7 +215,7 @@ GitHub Actions runs the same `pnpm check` gate on every pull request and push to
 
 The verified gate currently covers:
 
-**19 passing tests** across unit, HTTP, MCP, server-binding, and monotonic-timeline behavior.
+**22 passing tests** across unit, HTTP, MCP, TrueForge contract, server-binding, and monotonic-timeline behavior.
 
 - state transitions and unsafe rollback refusal
 - restart-without-recovery behavior
